@@ -1,11 +1,12 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:multicast_dns/multicast_dns.dart';
 
 const SERVICE = '_sockit._tcp';
 const QUERY = '${SERVICE}.local';
-const SEARCH_TIME = Duration(seconds: 10);
+const SEARCH_TIME = Duration(seconds: 3);
 const EXTRA_SEARCH_TIME = Duration(milliseconds: 300);
 
 void main() => runApp(SockitApp());
@@ -52,16 +53,18 @@ class Device {
 
 }
 class _SockitHomeState extends State<SockitHome> with WidgetsBindingObserver {
-  List<Device> _devices = [];
-  bool _searching;
-  MDnsClient _mDnsClient = MDnsClient();
+  final List<Device> _devices = [];
+  final GlobalKey<RefreshIndicatorState> _refreshKey = GlobalKey<RefreshIndicatorState>();
+  final MDnsClient _mDnsClient = MDnsClient();
 
   @override
   void initState() {
     super.initState();
 
     WidgetsBinding.instance.addObserver(this);
-    _reload();
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      _refreshKey.currentState.show();
+    });
   }
   @override
   void dispose() {
@@ -77,10 +80,9 @@ class _SockitHomeState extends State<SockitHome> with WidgetsBindingObserver {
     }
   }
 
-  _reload() async {
+  Future<void> _reload() async {
     setState(() {
       _devices.clear();
-      _searching = true;
     });
 
     await _mDnsClient.start();
@@ -99,31 +101,22 @@ class _SockitHomeState extends State<SockitHome> with WidgetsBindingObserver {
         }
       }
     }
-
-    setState(() {
-      _searching = false;
-    });
   }
 
-  _appBarBottom() =>
-      PreferredSize(
-        preferredSize: Size(double.infinity, 4.0),
-        child: SizedBox(
-          height: 4.0,
-          child: _searching ? LinearProgressIndicator() : Container(),
-        ),
-      );
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.title),
-        bottom: _appBarBottom(),
       ),
-      body: ListView.builder(
-        itemCount: _devices.length,
-        itemBuilder: (context, position) =>
-          _devices[position].build(context),
+      body: new RefreshIndicator(
+        child: ListView.builder(
+          itemCount: _devices.length,
+          itemBuilder: (context, position) =>
+            _devices[position].build(context),
+        ),
+        onRefresh: _reload,
+        key: _refreshKey,
       ),
     );
   }
