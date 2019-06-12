@@ -61,23 +61,9 @@ class _SockitHomeState extends State<SockitHome> with WidgetsBindingObserver {
   void initState() {
     super.initState();
 
-    WidgetsBinding.instance.addObserver(this);
     SchedulerBinding.instance.addPostFrameCallback((_) {
       _refreshKey.currentState.show();
     });
-  }
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused) {
-      print('pausing mDNS client');
-      _mDnsClient.stop();
-    }
   }
 
   Future<void> _reload() async {
@@ -101,6 +87,8 @@ class _SockitHomeState extends State<SockitHome> with WidgetsBindingObserver {
         }
       }
     }
+
+    _mDnsClient.stop();
   }
 
   @override
