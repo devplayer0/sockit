@@ -15,7 +15,7 @@ class SockitApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'Sockit',
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
@@ -33,16 +33,27 @@ class SockitHome extends StatefulWidget {
 }
 
 class Device {
-  String name;
+  String service, name;
   int port;
 
   Set<InternetAddress> addresses = {};
 
-  Device(this.name, this.port);
+  Device(this.service, this.port) {
+    this.name = service.substring(0, service.length - QUERY.length - 1);
+  }
+
+  _addressSummary() =>
+    Text(addresses.map((addr) => '${addr.host}:${port}').join(', '));
+  Widget build(BuildContext context) =>
+      ListTile(
+        title: Text(name),
+        subtitle: _addressSummary(),
+      );
+
 }
 class _SockitHomeState extends State<SockitHome> with WidgetsBindingObserver {
   List<Device> _devices = [];
-  bool _isSearching = true;
+  bool _searching;
   MDnsClient _mDnsClient = MDnsClient();
 
   @override
@@ -69,13 +80,14 @@ class _SockitHomeState extends State<SockitHome> with WidgetsBindingObserver {
   _reload() async {
     setState(() {
       _devices.clear();
+      _searching = true;
     });
 
     await _mDnsClient.start();
     await for (PtrResourceRecord ptr in _mDnsClient.lookup(ResourceRecordQuery.serverPointer(QUERY), timeout: SEARCH_TIME)) {
       await for (SrvResourceRecord srv in _mDnsClient.lookup(ResourceRecordQuery.service(ptr.domainName), timeout: EXTRA_SEARCH_TIME)) {
         await for (IPAddressResourceRecord a in _mDnsClient.lookup(ResourceRecordQuery.addressIPv4(srv.target), timeout: EXTRA_SEARCH_TIME)) {
-          var device = _devices.firstWhere((dev) => dev.name == srv.name, orElse: () {
+          var device = _devices.firstWhere((dev) => dev.service == srv.name, orElse: () {
             var dev = Device(srv.name, srv.port);
             _devices.add(dev);
             return dev;
@@ -87,21 +99,31 @@ class _SockitHomeState extends State<SockitHome> with WidgetsBindingObserver {
         }
       }
     }
+
+    setState(() {
+      _searching = false;
+    });
   }
 
+  _appBarBottom() =>
+      PreferredSize(
+        preferredSize: Size(double.infinity, 4.0),
+        child: SizedBox(
+          height: 4.0,
+          child: _searching ? LinearProgressIndicator() : Container(),
+        ),
+      );
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.title),
+        bottom: _appBarBottom(),
       ),
       body: ListView.builder(
         itemCount: _devices.length,
         itemBuilder: (context, position) =>
-          Padding(
-            padding: EdgeInsets.all(10.0),
-            child: Text(_devices[position].name)
-          ),
+          _devices[position].build(context),
       ),
     );
   }
