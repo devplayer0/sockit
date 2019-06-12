@@ -1,13 +1,23 @@
 #!/usr/bin/env python
+import argparse
 import signal
 import socket
+import socketserver
 
 import zeroconf
 
 def main():
+    parser = argparse.ArgumentParser(description='Sockit device emulator',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('-p', '--port', type=int, default=40420, help='Bind port')
+    parser.add_argument('-n', '--name', default='My Sockit', help='Device name')
+    parser.add_argument('-d', '--description', default='My first Sockit', help='Device description')
+    args = parser.parse_args()
+
+    address = socket.gethostbyname(socket.getfqdn())
     info = zeroconf.ServiceInfo('_sockit._tcp.local.',
-        'Living room Sockit._sockit._tcp.local.', address=socket.inet_aton('172.16.0.10'),
-        port=40420, properties={'description':'test service, please ignore', 'name': 'lol'})
+        f'{args.name}._sockit._tcp.local.', address=socket.inet_aton(address),
+        port=args.port, properties={'description': args.description})
 
     zc = zeroconf.Zeroconf()
     zc.register_service(info)

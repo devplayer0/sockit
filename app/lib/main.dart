@@ -6,8 +6,9 @@ import 'package:multicast_dns/multicast_dns.dart';
 
 const SERVICE = '_sockit._tcp';
 const QUERY = '${SERVICE}.local';
-const SEARCH_TIME = Duration(seconds: 3);
+const SEARCH_TIME = Duration(seconds: 2);
 const EXTRA_SEARCH_TIME = Duration(milliseconds: 300);
+final DESCRIPTION_REGEX = RegExp(r'.*description=');
 
 void main() => runApp(SockitApp());
 
@@ -34,7 +35,7 @@ class SockitHome extends StatefulWidget {
 }
 
 class Device {
-  String service, name;
+  String service, name, description;
   int port;
 
   Set<InternetAddress> addresses = {};
@@ -43,19 +44,29 @@ class Device {
     this.name = service.substring(0, service.length - QUERY.length - 1);
   }
 
-  _addressSummary() =>
-    Text(addresses.map((addr) => '${addr.host}:${port}').join(', '));
+  _extra() =>
+    Wrap(
+      direction: Axis.vertical,
+      spacing: 2.0,
+      children: <Widget>[
+        if (description != null) Text(description),
+        Text(
+          addresses.map((addr) => '${addr.host}:${port}').join(', '),
+          style: TextStyle(fontStyle: FontStyle.italic),
+        ),
+      ],
+    );
+
   Widget build(BuildContext context) =>
       ListTile(
         title: Text(name),
-        subtitle: _addressSummary(),
+        subtitle: _extra(),
+        isThreeLine: true,
       );
-
 }
 class _SockitHomeState extends State<SockitHome> with WidgetsBindingObserver {
   final List<Device> _devices = [];
   final GlobalKey<RefreshIndicatorState> _refreshKey = GlobalKey<RefreshIndicatorState>();
-  final MDnsClient _mDnsClient = MDnsClient();
 
   @override
   void initState() {
@@ -71,24 +82,32 @@ class _SockitHomeState extends State<SockitHome> with WidgetsBindingObserver {
       _devices.clear();
     });
 
-    await _mDnsClient.start();
-    await for (PtrResourceRecord ptr in _mDnsClient.lookup(ResourceRecordQuery.serverPointer(QUERY), timeout: SEARCH_TIME)) {
-      await for (SrvResourceRecord srv in _mDnsClient.lookup(ResourceRecordQuery.service(ptr.domainName), timeout: EXTRA_SEARCH_TIME)) {
-        await for (IPAddressResourceRecord a in _mDnsClient.lookup(ResourceRecordQuery.addressIPv4(srv.target), timeout: EXTRA_SEARCH_TIME)) {
-          var device = _devices.firstWhere((dev) => dev.service == srv.name, orElse: () {
-            var dev = Device(srv.name, srv.port);
-            _devices.add(dev);
-            return dev;
-          });
+    final MDnsClient mDnsClient = MDnsClient();
+    await mDnsClient.start();
+    await for (PtrResourceRecord ptr in mDnsClient.lookup(ResourceRecordQuery.serverPointer(QUERY), timeout: SEARCH_TIME)) {
+      await for (SrvResourceRecord srv in mDnsClient.lookup(ResourceRecordQuery.service(ptr.domainName), timeout: EXTRA_SEARCH_TIME)) {
+        var device = _devices.firstWhere((dev) => dev.service == srv.name, orElse: () {
+          var dev = Device(srv.name, srv.port);
+          _devices.add(dev);
+          return dev;
+        });
 
+        await for (IPAddressResourceRecord a in mDnsClient.lookup(ResourceRecordQuery.addressIPv4(srv.target), timeout: EXTRA_SEARCH_TIME)) {
           setState(() {
             device.addresses.add(a.address);
           });
         }
+        await for (TxtResourceRecord txt in mDnsClient.lookup(ResourceRecordQuery.text(srv.target), timeout: EXTRA_SEARCH_TIME)) {
+          if (txt.text.trim().startsWith(DESCRIPTION_REGEX)) {
+            setState(() {
+              device.description = txt.text.split('=').sublist(1).join('=');
+            });
+          }
+        }
       }
     }
 
-    _mDnsClient.stop();
+    mDnsClient.stop();
   }
 
   @override
