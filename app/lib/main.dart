@@ -1,4 +1,8 @@
+import 'dart:collection';
 import 'dart:io';
+import 'dart:convert';
+import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -34,14 +38,89 @@ class SockitHome extends StatefulWidget {
   _SockitHomeState createState() => _SockitHomeState();
 }
 
+String getErrorMessage(int type) {
+  switch (type) {
+    case 0x00:
+      return 'Bad request';
+    case 0x01:
+      return 'Failed';
+    default:
+      return 'Unknown';
+  }
+}
+abstract class Request<R> {
+  static const MAGIC = 'SKIT';
+
+  final int type;
+  Request(this.type);
+
+  ByteData encode();
+  R decodeResponse(ByteData res) {
+    if (res.lengthInBytes == 0) {
+      throw 'Received zero length response';
+    }
+
+    final status = res.getUint8(0);
+    if (status == 0xff) {
+      throw getErrorMessage(res.getUint8(1));
+    }
+  }
+}
+class GetState extends Request<bool> {
+  GetState() : super(0x00);
+
+  @override
+  bool decodeResponse(ByteData res) {
+    super.decodeResponse(res);
+    return res.getUint8(1) != 0;
+  }
+
+  @override
+  ByteData encode() {
+    return null;
+  }
+}
+class SetState extends Request<bool> {
+  final bool newState;
+  SetState(this.newState) : super(0x01);
+
+  @override
+  bool decodeResponse(ByteData res) {
+    super.decodeResponse(res);
+    return res.getUint8(1) != 0;
+  }
+
+  @override
+  ByteData encode() {
+    return ByteData(1)
+      ..setUint8(0, newState ? 1 : 0);
+  }
+}
+
 class Device {
   String service, name, description;
   int port;
-
-  Set<InternetAddress> addresses = {};
+  Set<InternetAddress> addresses = LinkedHashSet();
 
   Device(this.service, this.port) {
     this.name = service.substring(0, service.length - QUERY.length - 1);
+  }
+
+  Future<R> _makeReq<R>(Request<R> req) async {
+    final conn = await Socket.connect(addresses.first, port);
+
+    var data = ascii.encode(Request.MAGIC) + [req.type];
+    final reqParams = req.encode();
+    if (reqParams != null) {
+      data += reqParams.buffer.asUint8List();
+    }
+    conn.add(data);
+
+    final res_data = Uint8List.fromList(await conn.first);
+    final res = ByteData.view(res_data.buffer);
+    conn.destroy();
+
+    return req.decodeResponse(res);
   }
 
   _extra() =>
@@ -62,6 +141,19 @@ class Device {
         title: Text(name),
         subtitle: _extra(),
         isThreeLine: true,
+        onTap: () async {
+          var message;
+          try {
+            bool newState = Random().nextBool();
+            bool oldState = await _makeReq(SetState(newState));
+            message = 'New state: $oldState, Old state: $oldState';
+          } catch (err) {
+            message = 'Failed to get state: $err';
+          }
+
+          final snackBar = SnackBar(content: Text(message));
+          Scaffold.of(context).showSnackBar(snackBar);
+        },
       );
 }
 class _SockitHomeState extends State<SockitHome> with WidgetsBindingObserver {
