@@ -1,9 +1,9 @@
 import 'dart:collection';
 import 'dart:io';
 import 'dart:convert';
-import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:multicast_dns/multicast_dns.dart';
@@ -78,9 +78,7 @@ class GetState extends Request<bool> {
   }
 
   @override
-  ByteData encode() {
-    return null;
-  }
+  ByteData encode() => null;
 }
 class SetState extends Request<bool> {
   final bool newState;
@@ -93,10 +91,33 @@ class SetState extends Request<bool> {
   }
 
   @override
-  ByteData encode() {
-    return ByteData(1)
-      ..setUint8(0, newState ? 1 : 0);
+  ByteData encode() => ByteData(1)..setUint8(0, newState ? 1 : 0);
+}
+
+_encodeString(String str) {
+  final strData = utf8.encode(str);
+  if (strData.length > 0xff) {
+    throw 'UTF-8 encoded string too long (max 255 bytes)';
   }
+
+  final data = ByteData(1 + strData.length);
+  data.setUint8(0, strData.length);
+  data.buffer.asUint8List(1).setAll(0, strData);
+  return data;
+}
+class SetName extends Request<void> {
+  final String newName;
+  SetName(this.newName) : super(0x02);
+
+  @override
+  ByteData encode() => _encodeString(newName);
+}
+class SetDescription extends Request<void> {
+  final String newDescription;
+  SetDescription(this.newDescription) : super(0x03);
+
+  @override
+  ByteData encode() => _encodeString(newDescription);
 }
 
 final _scaffoldKey = GlobalKey<ScaffoldState>();
@@ -104,16 +125,22 @@ bool _reloading = false;
 class Device {
   static const MIN_REQ_DURATION = Duration(milliseconds: 200);
 
-  final String service, name;
+  final _name = ValueNotifier<String>(null);
+  final _description = ValueNotifier<String>(null);
   final int port;
   final Set<InternetAddress> addresses = LinkedHashSet();
 
-  String description;
   final _reqInProgress = ValueNotifier(false);
   final _state = ValueNotifier(false);
 
-  Device(this.service, this.port) : name =
-    service.substring(0, service.length - QUERY.length - 1);
+  final GlobalKey<FormState> _settingsKey = GlobalKey();
+  final _nameCtl = TextEditingController();
+  final _descCtl = TextEditingController();
+  final _settingsChanged = ValueNotifier(false);
+
+  Device(String service, this.port) {
+    _name.value = service.substring(0, service.length - QUERY.length - 1);
+  }
   @override
   int get hashCode => name.hashCode;
   @override
@@ -125,6 +152,12 @@ class Device {
     Device dev = other;
     return dev.name == name;
   }
+
+  String get name => _name.value;
+  String get description => _description.value;
+  void set name(String newName) => _name.value = newName;
+  void set description(String newDesc) => _description.value = newDesc;
+  String get service => '$name.$SERVICE.local';
 
   Future<R> _makeReq<R>(Request<R> req) async {
     final conn = await Socket.connect(addresses.first, port);
@@ -177,7 +210,10 @@ class Device {
       direction: Axis.vertical,
       spacing: 2.0,
       children: <Widget>[
-        if (description != null) Text(description),
+        if (description != null) ValueListenableBuilder<String>(
+          valueListenable: _description,
+          builder: (context, description, child) => Text(description),
+        ),
         Text(
           addresses.map((addr) => '${addr.host}:${port}').join(', '),
           style: TextStyle(fontStyle: FontStyle.italic),
@@ -185,15 +221,98 @@ class Device {
       ],
     );
 
+  String _validateStr(String value) {
+    value = value.trim();
+    if (value.isEmpty) {
+      return 'Enter a value';
+    }
+    if (utf8.encode(value).length > 0xff) {
+      return 'Value too long';
+    }
+    return null;
+  }
+  _openSettings(BuildContext context) => showDialog(
+    context: context,
+    builder: (context) {
+      _nameCtl.text = name;
+      _descCtl.text = description;
+
+      return AlertDialog(
+        title: Text('"$name" settings'),
+        content: SingleChildScrollView(
+          child: Form(
+            key: _settingsKey,
+            onChanged: () => _settingsChanged.value =
+              _nameCtl.text != name || _descCtl.text != description,
+            child: ListBody(
+              children: <Widget>[
+                TextFormField(
+                  controller: _nameCtl,
+                  validator: _validateStr,
+                  onSaved: (value) async {
+                    if (value == name) {
+                      return;
+                    }
+
+                    await _uiReq(SetName(value));
+                    name = value;
+                  },
+                  decoration: InputDecoration(
+                    labelText: 'Name',
+                  ),
+                ),
+                TextFormField(
+                  controller: _descCtl,
+                  validator: _validateStr,
+                  onSaved: (value) async {
+                    if (value == description) {
+                      return;
+                    }
+
+                    await _uiReq(SetDescription(value));
+                    description = value;
+                  },
+                  decoration: InputDecoration(
+                    labelText: 'Description',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: <Widget>[
+          FlatButton(
+            child: Text('CANCEL'),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          ValueListenableBuilder<bool>(
+            valueListenable: _settingsChanged,
+            builder: (context, changed, child) =>
+              FlatButton(
+                child: Text('SAVE'),
+                onPressed: changed ? () async {
+                    final form = _settingsKey.currentState;
+                    if (form.validate()) {
+                      Navigator.of(context).pop();
+                      form.save();
+                    }
+                } : null,
+              ),
+          ),
+        ],
+      );
+    }
+  );
+
   Widget build(BuildContext context, Animation<double> animation) =>
-    SlideTransition(
-      position: animation.drive(Tween<Offset>(
-        begin: Offset(1, 0),
-        end: Offset.zero,
-      )),
+    SizeTransition(
+      sizeFactor: animation,
       child: Card(
         child: ListTile(
-          title: Text(name),
+          title: ValueListenableBuilder<String>(
+            valueListenable: _name,
+            builder: (context, name, child) => Text(name),
+          ),
           subtitle: _extraInfo(),
           isThreeLine: description != null,
           trailing: ValueListenableBuilder<bool>(
@@ -209,6 +328,7 @@ class Device {
                 ),
           ),
           onTap: _reloading ? null : () => setState(!_state.value),
+          onLongPress: _reloading ? null : () => _openSettings(context),
         )
       )
     );
@@ -304,7 +424,7 @@ class _SockitHomeState extends State<SockitHome> with WidgetsBindingObserver {
               constraints: BoxConstraints(
                 minHeight: viewportConstraints.maxHeight,
               ),
-              child: Center(child: const Text('No devices found'))
+              child: Center(child: Text('No devices found.'))
             ),
           ),
       );
