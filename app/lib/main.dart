@@ -100,6 +100,7 @@ class SetState extends Request<bool> {
 }
 
 final _scaffoldKey = GlobalKey<ScaffoldState>();
+bool _reloading = false;
 class Device {
   static const MIN_REQ_DURATION = Duration(milliseconds: 200);
 
@@ -203,18 +204,17 @@ class Device {
                   valueListenable: _state,
                   builder: (context, state, child) => Switch(
                     value: _state.value,
-                    onChanged: setState,
+                    onChanged: _reloading ? null : setState,
                   ),
                 ),
           ),
-          onTap: () => setState(!_state.value),
+          onTap: _reloading ? null : () => setState(!_state.value),
         )
       )
     );
 }
 
 class _SockitHomeState extends State<SockitHome> with WidgetsBindingObserver {
-  bool _reloading = false;
   final List<Device> _devices = [];
   final GlobalKey<RefreshIndicatorState> _refreshKey = GlobalKey();
   final GlobalKey<AnimatedListState> _listKey = GlobalKey();
