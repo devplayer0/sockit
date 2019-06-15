@@ -1,20 +1,26 @@
+import 'dart:async';
 import 'dart:collection';
 import 'dart:io';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:multicast_dns/multicast_dns.dart';
 
-const SERVICE = '_sockit._tcp';
-const QUERY = '${SERVICE}.local';
-const SEARCH_TIME = Duration(seconds: 2);
-const EXTRA_SEARCH_TIME = Duration(milliseconds: 300);
-final DESCRIPTION_REGEX = RegExp(r'.*description=');
+final LIST_EQUALS = ListEquality().equals;
+
+final MULTICAST_GROUP = InternetAddress('224.0.0.220');
+const DISCOVERY_PORT = 40420;
+final MAGIC = ascii.encode('SKIT');
+const SEARCH_INTERVAL = Duration(milliseconds: 500);
+const SEARCH_TIME = Duration(seconds: 3);
 
 const DEV_DURATION = Duration(milliseconds: 200);
+
+InternetAddress addrFromBytes(int num) => InternetAddress(
+  '${num >> 24}.${(num >> 16) & 0xff}.${(num >> 8) & 0xff}.${num & 0xff}');
 
 void main() => runApp(SockitApp());
 
@@ -51,8 +57,6 @@ String getErrorMessage(int type) {
   }
 }
 abstract class Request<R> {
-  static const MAGIC = 'SKIT';
-
   final int type;
   Request(this.type);
 
@@ -125,24 +129,23 @@ bool _reloading = false;
 class Device {
   static const MIN_REQ_DURATION = Duration(milliseconds: 200);
 
-  final _name = ValueNotifier<String>(null);
-  final _description = ValueNotifier<String>(null);
+  final InternetAddress address;
   final int port;
-  final Set<InternetAddress> addresses = LinkedHashSet();
+  final _name, _description;
 
-  final _reqInProgress = ValueNotifier(false);
   final _state = ValueNotifier(false);
+  final _reqInProgress = ValueNotifier(false);
 
   final GlobalKey<FormState> _settingsKey = GlobalKey();
   final _nameCtl = TextEditingController();
   final _descCtl = TextEditingController();
   final _settingsChanged = ValueNotifier(false);
 
-  Device(String service, this.port) {
-    _name.value = service.substring(0, service.length - QUERY.length - 1);
-  }
+  Device(this.address, this.port,
+    {@required String name, @required String description}) :
+    _name = ValueNotifier(name), _description = ValueNotifier(description);
   @override
-  int get hashCode => name.hashCode;
+  int get hashCode => address.hashCode;
   @override
   bool operator ==(dynamic other) {
     if (other is! Device) {
@@ -150,27 +153,26 @@ class Device {
     }
 
     Device dev = other;
-    return dev.name == name;
+    return dev.address == address;
   }
 
   String get name => _name.value;
   String get description => _description.value;
   void set name(String newName) => _name.value = newName;
   void set description(String newDesc) => _description.value = newDesc;
-  String get service => '$name.$SERVICE.local';
 
   Future<R> _makeReq<R>(Request<R> req) async {
-    final conn = await Socket.connect(addresses.first, port);
+    final conn = await Socket.connect(address, port);
 
-    var data = ascii.encode(Request.MAGIC) + [req.type];
+    var data = MAGIC + [req.type];
     final reqParams = req.encode();
     if (reqParams != null) {
       data += reqParams.buffer.asUint8List();
     }
     conn.add(data);
 
-    final res_data = Uint8List.fromList(await conn.first);
-    final res = ByteData.view(res_data.buffer);
+    final resData = Uint8List.fromList(await conn.first);
+    final res = ByteData.view(resData.buffer);
     conn.destroy();
 
     return req.decodeResponse(res);
@@ -210,12 +212,12 @@ class Device {
       direction: Axis.vertical,
       spacing: 2.0,
       children: <Widget>[
-        if (description != null) ValueListenableBuilder<String>(
+        ValueListenableBuilder<String>(
           valueListenable: _description,
           builder: (context, description, child) => Text(description),
         ),
         Text(
-          addresses.map((addr) => '${addr.host}:${port}').join(', '),
+          address.address,
           style: TextStyle(fontStyle: FontStyle.italic),
         ),
       ],
@@ -314,7 +316,7 @@ class Device {
             builder: (context, name, child) => Text(name),
           ),
           subtitle: _extraInfo(),
-          isThreeLine: description != null,
+          isThreeLine: true,
           trailing: ValueListenableBuilder<bool>(
             valueListenable: _reqInProgress,
             builder: (context, rip, child) => rip ?
@@ -322,7 +324,7 @@ class Device {
                 ValueListenableBuilder<bool>(
                   valueListenable: _state,
                   builder: (context, state, child) => Switch(
-                    value: _state.value,
+                    value: _state.value ?? false,
                     onChanged: _reloading ? null : setState,
                   ),
                 ),
@@ -353,56 +355,65 @@ class _SockitHomeState extends State<SockitHome> with WidgetsBindingObserver {
       _reloading = true;
     });
 
-    final renewed = HashSet();
-    final MDnsClient mDnsClient = MDnsClient();
-    await mDnsClient.start();
-    await for (PtrResourceRecord ptr in mDnsClient.lookup(
-      ResourceRecordQuery.serverPointer(QUERY),
-      timeout: SEARCH_TIME)
-    ) {
-      await for (SrvResourceRecord srv in mDnsClient.lookup(
-        ResourceRecordQuery.service(ptr.domainName),
-        timeout: EXTRA_SEARCH_TIME)
-      ) {
-        var device = _devices.firstWhere(
-          (dev) => dev.service == srv.name,
-          orElse: () {
-            var dev = Device(srv.name, srv.port);
-            _devices.add(dev);
-            _listKey.currentState.insertItem(_devices.length - 1, duration: DEV_DURATION);
-            return dev;
-          },
-        );
-        final shouldLoad = renewed.add(device);
+    final found = HashSet<Device>();
+    final socket = await RawDatagramSocket.bind(
+      InternetAddress.anyIPv4,
+      0,
+      reuseAddress: true,
+    );
+    socket.multicastHops = 1;
 
-        await for (IPAddressResourceRecord a in mDnsClient.lookup(
-          ResourceRecordQuery.addressIPv4(srv.target),
-          timeout: EXTRA_SEARCH_TIME)
-        ) {
-          setState(() {
-            device.addresses.add(a.address);
-            if (shouldLoad) {
-              device.loadState();
-            }
-          });
-        }
-        await for (TxtResourceRecord txt in mDnsClient.lookup(
-          ResourceRecordQuery.text(srv.target),
-          timeout: EXTRA_SEARCH_TIME)
-        ) {
-          if (txt.text.trim().startsWith(DESCRIPTION_REGEX)) {
-            setState(() {
-              device.description = txt.text.split('=').sublist(1).join('=');
-            });
-          }
-        }
+    final searchData = MAGIC + [0x00];
+    socket.send(searchData, MULTICAST_GROUP, DISCOVERY_PORT);
+    final searchTimer = Timer.periodic(
+      SEARCH_INTERVAL,
+      (timer) {
+        socket.send(searchData, MULTICAST_GROUP, DISCOVERY_PORT);
+      },
+    );
+
+    Future.delayed(SEARCH_TIME, () {
+      searchTimer.cancel();
+      socket.close();
+    });
+    await for (RawSocketEvent event in socket) {
+      if (event != RawSocketEvent.read) {
+        continue;
       }
+
+      final msg = socket.receive();
+      final data = ByteData.view(Uint8List.fromList(msg.data).buffer);
+      if (!LIST_EQUALS(data.buffer.asUint8List(0, MAGIC.length), MAGIC)) {
+        print('ignoring invalid beacon from ${msg.address}:${msg.port}');
+        continue;
+      }
+
+      print('received beacon from ${msg.address}:${msg.port}');
+      final device = _devices.firstWhere(
+        (dev) => dev.address == msg.address,
+        orElse: () {
+          final port = data.getUint16(MAGIC.length);
+          final nameLen = data.getUint8(MAGIC.length + 2);
+          final name = utf8.decode(data.buffer.asUint8List(MAGIC.length + 2 + 1, nameLen));
+          final description = utf8.decode(data.buffer.asUint8List(MAGIC.length + 2 + 1 + nameLen));
+
+          var dev = Device(
+            msg.address,
+            port,
+            name: name,
+            description: description
+          );
+          _devices.add(dev);
+          _listKey.currentState.insertItem(_devices.length - 1, duration: DEV_DURATION);
+          return dev;
+        },
+      );
+      found.add(device);
     }
 
-    mDnsClient.stop();
     setState(() {
       _reloading = false;
-      _devices.where((dev) => !renewed.contains(dev)).toSet().forEach((dev) {
+      _devices.where((dev) => !found.contains(dev)).toSet().forEach((dev) {
         int i =_devices.indexOf(dev);
         _devices.removeAt(i);
         _listKey.currentState.removeItem(i, dev.build, duration: DEV_DURATION);

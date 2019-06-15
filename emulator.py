@@ -140,7 +140,7 @@ class Emulator:
             if disc_type == DiscType.SEARCH:
                 print(f'sending discovery info to {src}')
                 name_enc = self.name.encode('utf-8')
-                res = socket.inet_aton(self.address) + \
+                res = MAGIC + \
                     struct.pack('!HB', self.port, len(name_enc)) + \
                     name_enc + \
                     self.description.encode('utf-8')
