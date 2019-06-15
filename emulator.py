@@ -138,7 +138,7 @@ class Emulator:
                 continue
 
             if disc_type == DiscType.SEARCH:
-                print(f'sending discovery info to {src}')
+                print(f'sending beacon to {src}')
                 name_enc = self.name.encode('utf-8')
                 res = MAGIC + \
                     struct.pack('!HB', self.port, len(name_enc)) + \
