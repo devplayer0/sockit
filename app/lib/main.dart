@@ -109,14 +109,19 @@ _encodeString(String str) {
   data.buffer.asUint8List(1).setAll(0, strData);
   return data;
 }
-class SetName extends Request<void> {
+class SetName extends Request<bool> {
   final String newName;
   SetName(this.newName) : super(0x02);
 
   @override
   ByteData encode() => _encodeString(newName);
+  @override
+  bool decodeResponse(ByteData res) {
+    super.decodeResponse(res);
+    return true;
+  }
 }
-class SetDescription extends Request<void> {
+class SetDescription extends Request<bool> {
   final String newDescription;
   SetDescription(this.newDescription) : super(0x03);
 
@@ -236,8 +241,12 @@ class Device {
   _openSettings(BuildContext context) => showDialog(
     context: context,
     builder: (context) {
-      _nameCtl.text = name;
-      _descCtl.text = description;
+      _nameCtl
+        ..text = name
+        ..selection = TextSelection.collapsed(offset: 0);
+      _descCtl
+        ..text = description
+        ..selection = TextSelection.collapsed(offset: 0);
 
       return AlertDialog(
         title: Text('"$name" settings'),
@@ -256,8 +265,8 @@ class Device {
                       return;
                     }
 
-                    await _uiReq(SetName(value));
-                    name = value;
+                    if (await _uiReq(SetName(value)) != null)
+                      name = value;
                   },
                   decoration: InputDecoration(
                     labelText: 'Name',
@@ -271,8 +280,8 @@ class Device {
                       return;
                     }
 
-                    await _uiReq(SetDescription(value));
-                    description = value;
+                    if (await _uiReq(SetDescription(value)) != null)
+                      description = value;
                   },
                   decoration: InputDecoration(
                     labelText: 'Description',
@@ -389,26 +398,31 @@ class _SockitHomeState extends State<SockitHome> with WidgetsBindingObserver {
       }
 
       print('received beacon from ${msg.address}:${msg.port}');
+
+      final nameLen = data.getUint8(MAGIC.length + 2);
+      final name = utf8.decode(data.buffer.asUint8List(MAGIC.length + 2 + 1, nameLen));
+      final description = utf8.decode(data.buffer.asUint8List(MAGIC.length + 2 + 1 + nameLen));
       final device = _devices.firstWhere(
         (dev) => dev.address == msg.address,
         orElse: () {
           final port = data.getUint16(MAGIC.length);
-          final nameLen = data.getUint8(MAGIC.length + 2);
-          final name = utf8.decode(data.buffer.asUint8List(MAGIC.length + 2 + 1, nameLen));
-          final description = utf8.decode(data.buffer.asUint8List(MAGIC.length + 2 + 1 + nameLen));
 
           var dev = Device(
             msg.address,
             port,
             name: name,
-            description: description
+            description: description,
           );
           _devices.add(dev);
           _listKey.currentState.insertItem(_devices.length - 1, duration: DEV_DURATION);
           return dev;
         },
       );
-      found.add(device);
+      if (name != device.name) device.name = name;
+      if (description != device.description) device.description = description;
+      if (found.add(device)) {
+        device.loadState();
+      }
     }
 
     setState(() {
