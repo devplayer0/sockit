@@ -15,7 +15,7 @@ final MULTICAST_GROUP = InternetAddress('224.0.0.220');
 const DISCOVERY_PORT = 40420;
 final MAGIC = ascii.encode('SKIT');
 const SEARCH_INTERVAL = Duration(milliseconds: 500);
-const SEARCH_TIME = Duration(seconds: 3);
+const SEARCH_TIME = Duration(seconds: 2);
 
 const DEV_DURATION = Duration(milliseconds: 200);
 
@@ -127,12 +127,17 @@ class SetDescription extends Request<bool> {
 
   @override
   ByteData encode() => _encodeString(newDescription);
+  @override
+  bool decodeResponse(ByteData res) {
+    super.decodeResponse(res);
+    return true;
+  }
 }
 
 final _scaffoldKey = GlobalKey<ScaffoldState>();
 bool _reloading = false;
 class Device {
-  static const MIN_REQ_DURATION = Duration(milliseconds: 200);
+  static const MIN_REQ_DURATION = Duration(milliseconds: 150);
 
   final InternetAddress address;
   final int port;
@@ -148,7 +153,10 @@ class Device {
 
   Device(this.address, this.port,
     {@required String name, @required String description}) :
-    _name = ValueNotifier(name), _description = ValueNotifier(description);
+    _name = ValueNotifier(name), _description = ValueNotifier(description) {
+    _nameCtl.text = name;
+    _descCtl.text = description;
+  }
   @override
   int get hashCode => address.hashCode;
   @override
@@ -163,8 +171,14 @@ class Device {
 
   String get name => _name.value;
   String get description => _description.value;
-  void set name(String newName) => _name.value = newName;
-  void set description(String newDesc) => _description.value = newDesc;
+  void set name(String newName) {
+    _name.value = newName;
+    _nameCtl.text = newName;
+  }
+  void set description(String newDesc) {
+    _description.value = newDesc;
+    _descCtl.text = newDesc;
+  }
 
   Future<R> _makeReq<R>(Request<R> req) async {
     final conn = await Socket.connect(address, port);
@@ -241,13 +255,6 @@ class Device {
   _openSettings(BuildContext context) => showDialog(
     context: context,
     builder: (context) {
-      _nameCtl
-        ..text = name
-        ..selection = TextSelection.collapsed(offset: 0);
-      _descCtl
-        ..text = description
-        ..selection = TextSelection.collapsed(offset: 0);
-
       return AlertDialog(
         title: Text('"$name" settings'),
         content: SingleChildScrollView(
