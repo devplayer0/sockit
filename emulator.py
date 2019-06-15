@@ -14,6 +14,7 @@ socketserver.TCPServer.allow_reuse_address = True
 
 MAGIC = b'SKIT'
 DISCOVERY_PORT = 40420
+MULTICAST_GROUP = '224.0.0.220'
 
 class DiscType(Enum):
     SEARCH = 0x00
@@ -109,8 +110,10 @@ class Emulator:
 
         self.disc_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.disc_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.disc_socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        self.disc_socket.bind((addr_info['broadcast'], DISCOVERY_PORT))
+        self.disc_socket.bind((MULTICAST_GROUP, DISCOVERY_PORT))
+
+        mreq = socket.inet_aton(MULTICAST_GROUP) + socket.inet_aton(self.address)
+        self.disc_socket.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
 
         self.disc_thread = threading.Thread(target=self._run_discovery)
         self.disc_thread.start()
