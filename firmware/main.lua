@@ -22,24 +22,24 @@ name = 'Real device'
 description = 'A real Sockit!'
 
 function send_error(sock, e_type)
-	local port, addr = sock:getpeer()
-	print(string.format('sending error 0x%02x to %s', e_type, addr))
+  local port, addr = sock:getpeer()
+  print(string.format('sending error 0x%02x to %s', e_type, addr))
 
-	local err = struct.pack('BB', RES_ERROR, e_type)
-	sock:send(err, function()
-		sock:close()
-	end)
+  local err = struct.pack('BB', RES_ERROR, e_type)
+  sock:send(err, function()
+    sock:close()
+  end)
 end
 function check_string(sock, data)
   if #data == 0 then
-	send_error(sock, ERR_BAD_REQ)
-	return
+    send_error(sock, ERR_BAD_REQ)
+    return
   end
 
   local len = struct.unpack('B', string.sub(data, 1, 1))
   if #data < 1 + len then
-	send_error(sock, ERR_BAD_REQ)
-	return
+    send_error(sock, ERR_BAD_REQ)
+    return
   end
 
   return string.sub(data, 2, 1 + len)
@@ -48,56 +48,57 @@ end
 -- we assume a request fits within one packet
 function handle_req(sock, data)
   if #data < 5 or string.sub(data, 1, 4) ~= MAGIC then
-	send_error(sock, ERR_BAD_REQ)
+    send_error(sock, ERR_BAD_REQ)
     return
   end
 
   local port, addr = sock:getpeer()
   local req_type = struct.unpack('B', string.sub(data, 5))
   if req_type == REQ_GET_STATE then
-	print(string.format('sending state to %s', addr))
-	res = struct.pack('BB', RES_OK, gpio.read(RELAY_PIN))
+    print(string.format('sending state to %s', addr))
+    res = struct.pack('BB', RES_OK, gpio.read(RELAY_PIN))
   elseif req_type == REQ_SET_STATE then
-	if #data < 6 then
-	  send_error(sock, ERR_BAD_REQ)
-	  return
-	end
-	local state = gpio.read(RELAY_PIN)
-	local new_state = struct.unpack('B', string.sub(data, 6)) > 0 and gpio.HIGH or gpio.LOW
-	print(string.format('%s setting state to %s (currently %d)', addr, tostring(new_state), state))
-	gpio.write(RELAY_PIN, new_state)
-	res = struct.pack('BB', RES_OK, state)
+    if #data < 6 then
+      send_error(sock, ERR_BAD_REQ)
+      return
+    end
+
+    local state = gpio.read(RELAY_PIN)
+    local new_state = struct.unpack('B', string.sub(data, 6)) > 0 and gpio.HIGH or gpio.LOW
+    print(string.format('%s setting state to %s (currently %d)', addr, tostring(new_state), state))
+    gpio.write(RELAY_PIN, new_state)
+    res = struct.pack('BB', RES_OK, state)
   elseif req_type == REQ_SET_NAME then
-	local new_name = check_string(sock, string.sub(data, 6))
-	if not new_name then
-	  return
-	end
+    local new_name = check_string(sock, string.sub(data, 6))
+    if not new_name then
+      return
+    end
 
-	print(string.format('%s setting name to %s', addr, new_name))
-	name = new_name
-	res = struct.pack('B', RES_OK)
+    print(string.format('%s setting name to %s', addr, new_name))
+    name = new_name
+    res = struct.pack('B', RES_OK)
   elseif req_type == REQ_SET_DESC then
-	local new_desc = check_string(sock, string.sub(data, 6))
-	if not new_desc then
-	  return
-	end
+    local new_desc = check_string(sock, string.sub(data, 6))
+    if not new_desc then
+      return
+    end
 
-	print(string.format('%s setting description to %s', addr, new_desc))
-	description = new_desc
-	res = struct.pack('B', RES_OK)
+    print(string.format('%s setting description to %s', addr, new_desc))
+    description = new_desc
+    res = struct.pack('B', RES_OK)
   else
-	send_error(sock, ERR_BAD_REQ)
-	return
+    send_error(sock, ERR_BAD_REQ)
+    return
   end
 
   sock:send(res, function()
-	  sock:close()
+    sock:close()
   end)
 end
 
 local server = net.createServer()
 server:listen(PORT, function(sock)
-	sock:on('receive', handle_req)
+  sock:on('receive', handle_req)
 end)
 
 net.multicastJoin('any', MULTICAST_GROUP)
@@ -118,4 +119,3 @@ disc_socket:on('receive', function(sock, data, port, addr)
     print(string.format('ignoring invalid discovery request 0x%02x from %s', req_type, addr))
   end
 end)
--- vim:ts=2 sw=2 expandtab

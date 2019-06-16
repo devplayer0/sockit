@@ -66,4 +66,3 @@ print('Connecting to WiFi access point...')
 wifi.setmode(wifi.STATION)
 wifi.sta.config(dofile('credentials.lua'))
 -- wifi.sta.connect() not necessary because config() uses auto-connect=true by default
--- vim:ts=2 sw=2 expandtab
