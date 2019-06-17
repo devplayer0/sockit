@@ -19,10 +19,13 @@ MULTICAST_GROUP = '224.0.0.220'
 class DiscType(Enum):
     SEARCH = 0x00
 class ReqType(Enum):
-    GET_STATE = 0x00
-    SET_STATE = 0x01
-    SET_NAME  = 0x02
-    SET_DESC  = 0x03
+    GET_STATE     = 0x00
+    SET_STATE     = 0x01
+    SET_NAME      = 0x02
+    SET_DESC      = 0x03
+    GET_WIFI_NET  = 0x04
+    GET_WIFI_NETS = 0x05
+    SET_WIFI_NET  = 0x06
 class ResType(Enum):
     OK = 0x00
     ERROR = 0xff
