@@ -2,7 +2,6 @@ require 'config_helper'
 require 'wifi_helper'
 
 RELAY_PIN = 6
-gpio.mode(RELAY_PIN, gpio.OUTPUT)
 
 MULTICAST_GROUP = '224.0.0.220'
 PORT = 40420

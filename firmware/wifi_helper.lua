@@ -43,14 +43,12 @@ function apply_wifi_config(config, cb)
 
     attempts = 0
     wifi.eventmon.register(wifi.eventmon.STA_CONNECTED, function(event)
-      --wifi_completed = false
       print('connected to '..event.SSID)
     end)
     wifi.eventmon.register(wifi.eventmon.STA_GOT_IP, function(event)
       wifi.eventmon.unregister(wifi.eventmon.STA_CONNECTED)
 
       print('got ip '..event.IP..' from '..config.wifi.ssid)
-      --wifi_completed = true
       stop_wifi_timer()
       cb()
     end)
@@ -68,14 +66,14 @@ function apply_wifi_config(config, cb)
         end
       end
 
-      if attempts < 3 then
+      --if attempts < 3 then
+      if true then
         attempts = attempts + 1
         print('retrying connection to '..event.SSID..' (attempt '..attempts..')')
       else
         wifi.eventmon.unregister(wifi.eventmon.STA_DISCONNECTED)
 
         config.wifi.ap = true
-        save_config(config)
         apply_wifi_config(config, cb)
       end
     end)

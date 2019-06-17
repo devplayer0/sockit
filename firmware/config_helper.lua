@@ -39,7 +39,7 @@ function load_config()
   if not file.exists('config.lua') then
     print('writing default config')
     if not save_config(DEFAULT_CONFIG) then
-      return false
+      print('warning: failed to write default config')
     end
     return DEFAULT_CONFIG
   end
