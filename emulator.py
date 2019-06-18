@@ -23,15 +23,21 @@ class ReqType(Enum):
     SET_STATE     = 0x01
     SET_NAME      = 0x02
     SET_DESC      = 0x03
-    GET_WIFI_NET  = 0x04
-    GET_WIFI_NETS = 0x05
-    SET_WIFI_NET  = 0x06
+    GET_NET       = 0x04
+    GET_NETS      = 0x05
+    SET_NET       = 0x06
 class ResType(Enum):
     OK = 0x00
     ERROR = 0xff
 class ErrType(Enum):
     BAD_REQ = 0x00
     FAILED = 0x01
+class AuthMode(Enum):
+    OPEN     = 0
+    WEP      = 1
+    WPA      = 2
+    WPA2     = 3
+    WPA_WPA2 = 4
 
 def default_iface():
    return netifaces.gateways()['default'][netifaces.AF_INET][1]
@@ -54,6 +60,7 @@ class SockitHandler(socketserver.BaseRequestHandler):
 
     def handle(self):
         ref = self.server.ref
+        src = self.request.getpeername()
         header = self.request.recv(5, socket.MSG_WAITALL)
         if not header:
             return
@@ -68,7 +75,7 @@ class SockitHandler(socketserver.BaseRequestHandler):
             return
 
         if req_type == ReqType.GET_STATE:
-            print(f'sending state to {self.request.getpeername()}')
+            print(f'sending state to {src}')
             res = struct.pack('B?', ResType.OK.value, ref.state)
             self.request.sendall(res)
         elif req_type == ReqType.SET_STATE:
@@ -99,6 +106,48 @@ class SockitHandler(socketserver.BaseRequestHandler):
             ref.description = new_desc
             res = struct.pack('B', ResType.OK.value)
             self.request.sendall(res)
+        elif req_type == ReqType.GET_NET:
+            if ref.ap:
+                print(f'telling {src} we are an ap')
+                res = struct.pack('BB', ResType.OK.value, 1)
+            else:
+                print(f'telling {src} our current net')
+                ssid_enc = ref.ssid.encode('utf-8')
+                res = struct.pack('BBB', ResType.OK.value, 0, len(ssid_enc)) + \
+                    ssid_enc
+            self.request.sendall(res)
+        elif req_type == ReqType.GET_NETS:
+            print(f'sending fake network list to {src}')
+            res = struct.pack('BB', ResType.OK.value, len(ref.fake_scanned))
+            for ssid, info in ref.fake_scanned.items():
+                ssid_enc = ssid.encode('utf-8')
+                res += struct.pack('BbB', info['authmode'].value, info['rssi'], len(ssid_enc)) + \
+                    ssid_enc
+            self.request.sendall(res)
+        elif req_type == ReqType.SET_NET:
+            mode = self.request.recv(1, socket.MSG_WAITALL)
+            if not mode:
+                return
+            is_ap, = struct.unpack('?', mode)
+
+            if is_ap:
+                print(f'{src} setting ap mode')
+                ref.ap = True
+            else:
+                ssid = self._recv_string()
+                if not ssid:
+                    return
+                pwd = self._recv_string()
+                if not pwd:
+                    return
+
+                print(f'{src} setting network to {ssid}')
+                ref.ap = False
+                ref.ssid = ssid
+                ref.password = pwd
+
+            res = struct.pack('B', ResType.OK.value)
+            self.request.sendall(res)
 
 class Emulator:
     def __init__(self, name, description, iface, port):
@@ -107,6 +156,22 @@ class Emulator:
         self.name = name
         self.description = description
         self.port = port
+        self.ap = True
+        self.ssid = 'TestWifi'
+        self.fake_scanned = {
+            'lol': {
+                'rssi': -60,
+                'authmode': AuthMode.OPEN,
+            },
+            'dude': {
+                'rssi': -90,
+                'authmode': AuthMode.WPA2,
+            },
+            'hello': {
+                'rssi': -30,
+                'authmode': AuthMode.WPA_WPA2,
+            }
+        }
 
         addr_info = netifaces.ifaddresses(iface)[netifaces.AF_INET][0]
         self.address = addr_info['addr']
