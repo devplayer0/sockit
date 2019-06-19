@@ -192,6 +192,12 @@ function main_start(conf)
 end
 function main_stop()
   print('closing sockets')
-  disc_socket:close()
-  server:close()
+  if disc_socket then
+    disc_socket:close()
+    disc_socket = nil
+  end
+  if server then
+    server:close()
+    server = nil
+  end
 end
