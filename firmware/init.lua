@@ -1,5 +1,6 @@
 require 'config_helper'
 require 'wifi_helper'
+require 'main'
 
 RELAY_PIN = 6
 gpio.mode(RELAY_PIN, gpio.OUTPUT)
@@ -10,13 +11,18 @@ gpio.mode(BUTTON_PIN, gpio.INT)
 gpio.trig(BUTTON_PIN, 'both', function(level, when, count)
   if level == gpio.LOW then
     button_start = when
+  elseif when - button_start > 20*1000*1000 then
+    file.remove('config.lua')
   elseif when - button_start > 5*1000*1000 then
     node.restart()
   elseif when - button_start > 1*1000*1000 then
     print('forcing ap mode')
     local config = load_config()
     config.wifi.ap = true
-    apply_wifi_config(config, function() end)
+    apply_wifi_config(config, function()
+      main_stop()
+      main_start(config)
+    end)
   else
     print('button toggle output')
     gpio.write(RELAY_PIN, gpio.read(RELAY_PIN) == 1 and gpio.LOW or gpio.HIGH)
@@ -30,5 +36,5 @@ if not config then
 end
 
 apply_wifi_config(config, function()
-  dofile('main.lua')(config)
+  main_start(config)
 end)

@@ -147,6 +147,8 @@ function handle_req(sock, data)
       sock:close()
       apply_wifi_config(config, function()
         print('applied new config')
+        main_stop()
+        main_start(config)
       end)
     end)
     return
@@ -160,17 +162,17 @@ function handle_req(sock, data)
   end)
 end
 
-return function(conf)
-  print('starting up')
+function main_start(conf)
+  print('starting sockets')
   config = conf
 
-  local server = net.createServer()
+  server = net.createServer()
   server:listen(PORT, function(sock)
     sock:on('receive', handle_req)
   end)
 
   net.multicastJoin('any', MULTICAST_GROUP)
-  local disc_socket = net.createUDPSocket()
+  disc_socket = net.createUDPSocket()
   disc_socket:listen(PORT)
   disc_socket:on('receive', function(sock, data, port, addr)
     if #data < 5 or string.sub(data, 1, 4) ~= MAGIC then
@@ -187,4 +189,9 @@ return function(conf)
       print(string.format('ignoring invalid discovery request 0x%02x from %s', req_type, addr))
     end
   end)
+end
+function main_stop()
+  print('closing sockets')
+  disc_socket:close()
+  server:close()
 end
