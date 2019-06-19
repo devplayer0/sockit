@@ -1,0 +1,182 @@
+diff --git a/.gitignore b/.gitignore
+index ddf3c2d2..79ca6819 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -2,10 +2,9 @@
+ sdk/
+ cache/
+ .ccache/
+-local/
+ user_config.h
+ server-ca.crt
+-luac.cross
++luac.cross*
+ uz_unzip
+ uz_zip
+ tools/toolchains/
+diff --git a/app/include/user_config.h b/app/include/user_config.h
+index fef04b1d..2aae3a87 100644
+--- a/app/include/user_config.h
++++ b/app/include/user_config.h
+@@ -35,7 +35,7 @@
+ // no performance loss.  However, you can define LUA_DWORD_ALIGNED_TVALUES and
+ // this will force 16 byte TValues on FP builds.
+ 
+-//#define LUA_NUMBER_INTEGRAL
++#define LUA_NUMBER_INTEGRAL
+ //#define LUA_DWORD_ALIGNED_TVALUES
+ 
+ 
+@@ -45,7 +45,7 @@
+ // the size of the store that you need.  This can be any multiple of 4kB up to
+ // a maximum 256Kb.
+ 
+-//#define LUA_FLASH_STORE 0x10000
++#define LUA_FLASH_STORE 0x10000
+ 
+ 
+ // By default Lua executes the file init.lua at start up.  The following
+@@ -55,7 +55,7 @@
+ // The example provided executes the LFS module "_init" at startup or fails
+ // through to the interactive prompt.
+ 
+-//#define LUA_INIT_STRING "pcall(function() node.flashindex'_init'() end)"
++#define LUA_INIT_STRING "pcall(function() node.flashindex'_lfs_init'() end)"
+ 
+ 
+ // NodeMCU supports two file systems: SPIFFS and FATFS, the first is available
+@@ -72,7 +72,7 @@
+ // gives the fastest start-up and imaging times.
+ 
+ #define BUILD_SPIFFS
+-//#define SPIFFS_FIXED_LOCATION        0x100000
++#define SPIFFS_FIXED_LOCATION        0xc0000
+ //#define SPIFFS_MAX_FILESYSTEM_SIZE    0x20000
+ //#define SPIFFS_SIZE_1M_BOUNDARY
+ #define SPIFFS_CACHE 1          // Enable if you use you SPIFFS in R/W mode
+diff --git a/app/include/user_modules.h b/app/include/user_modules.h
+index 009accd9..387d2490 100644
+--- a/app/include/user_modules.h
++++ b/app/include/user_modules.h
+@@ -7,7 +7,7 @@
+ // includes general purpose interface modules which require at most two GPIO pins.
+ // See https://github.com/nodemcu/nodemcu-firmware/pull/1127 for discussions.
+ // New modules should be disabled by default and added in alphabetical order.
+-#define LUA_USE_MODULES_ADC
++//#define LUA_USE_MODULES_ADC
+ //#define LUA_USE_MODULES_ADS1115
+ //#define LUA_USE_MODULES_ADXL345
+ //#define LUA_USE_MODULES_AM2320
+@@ -21,7 +21,7 @@
+ //#define LUA_USE_MODULES_COLOR_UTILS
+ //#define LUA_USE_MODULES_CRON
+ //#define LUA_USE_MODULES_CRYPTO
+-#define LUA_USE_MODULES_DHT
++//#define LUA_USE_MODULES_DHT
+ //#define LUA_USE_MODULES_DS18B20
+ //#define LUA_USE_MODULES_ENCODER
+ //#define LUA_USE_MODULES_ENDUSER_SETUP // USE_DNS in dhcpserver.h needs to be enabled for this module to work.
+@@ -33,14 +33,14 @@
+ //#define LUA_USE_MODULES_HMC5883L
+ //#define LUA_USE_MODULES_HTTP
+ //#define LUA_USE_MODULES_HX711
+-#define LUA_USE_MODULES_I2C
++//#define LUA_USE_MODULES_I2C
+ //#define LUA_USE_MODULES_L3G4200D
+ //#define LUA_USE_MODULES_MCP4725
+ //#define LUA_USE_MODULES_MDNS
+-#define LUA_USE_MODULES_MQTT
++//#define LUA_USE_MODULES_MQTT
+ #define LUA_USE_MODULES_NET
+ #define LUA_USE_MODULES_NODE
+-#define LUA_USE_MODULES_OW
++//#define LUA_USE_MODULES_OW
+ //#define LUA_USE_MODULES_PCM
+ //#define LUA_USE_MODULES_PERF
+ //#define LUA_USE_MODULES_PWM
+@@ -55,16 +55,16 @@
+ //#define LUA_USE_MODULES_SJSON
+ //#define LUA_USE_MODULES_SNTP
+ //#define LUA_USE_MODULES_SOMFY
+-#define LUA_USE_MODULES_SPI
++//#define LUA_USE_MODULES_SPI
+ //#define LUA_USE_MODULES_SQLITE3
+-//#define LUA_USE_MODULES_STRUCT
++#define LUA_USE_MODULES_STRUCT
+ //#define LUA_USE_MODULES_SWITEC
+ //#define LUA_USE_MODULES_TCS34725
+ //#define LUA_USE_MODULES_TM1829
+ //#define LUA_USE_MODULES_TLS
+ #define LUA_USE_MODULES_TMR
+ //#define LUA_USE_MODULES_TSL2561
+-#define LUA_USE_MODULES_UART
++//#define LUA_USE_MODULES_UART
+ //#define LUA_USE_MODULES_U8G2
+ //#define LUA_USE_MODULES_UCG
+ //#define LUA_USE_MODULES_WEBSOCKET
+diff --git a/app/include/user_version.h b/app/include/user_version.h
+index f8ba27db..0de28a01 100644
+--- a/app/include/user_version.h
++++ b/app/include/user_version.h
+@@ -11,7 +11,7 @@
+ #define NODE_VERSION_STR(x)	#x
+ #define NODE_VERSION_XSTR(x)	NODE_VERSION_STR(x)
+ 
+-#define NODE_VERSION		"NodeMCU " ESP_SDK_VERSION_STRING "." NODE_VERSION_XSTR(NODE_VERSION_INTERNAL)
++#define NODE_VERSION		"Sockit " ESP_SDK_VERSION_STRING "." NODE_VERSION_XSTR(NODE_VERSION_INTERNAL)
+ 
+ #ifndef BUILD_DATE
+ #define BUILD_DATE		"unspecified"
+diff --git a/build.sh b/build.sh
+new file mode 100755
+index 00000000..b8ebb004
+--- /dev/null
++++ b/build.sh
+@@ -0,0 +1,5 @@
++#!/bin/sh
++set -e
++
++make
++srec_cat -output bin/nodemcu.bin -binary bin/0x00000.bin -binary -fill 0xff 0x00000 0x10000 bin/0x10000.bin -binary -offset 0x10000
+diff --git a/lfs.sh b/lfs.sh
+new file mode 100755
+index 00000000..4e5962bc
+--- /dev/null
++++ b/lfs.sh
+@@ -0,0 +1,8 @@
++#!/bin/sh
++set -e
++
++LFS_MAPPED="0x40268000"
++LFS_BASE="0x68000"
++
++./luac.cross.int -a $LFS_MAPPED -o bin/lfs.img local/lua/*.lua
++esptool --baud 460800 write_flash --flash_mode dout $LFS_BASE bin/lfs.img
+diff --git a/local/lua b/local/lua
+new file mode 120000
+index 00000000..5a3d3c1f
+--- /dev/null
++++ b/local/lua
+@@ -0,0 +1 @@
++../../lua
+\ No newline at end of file
+diff --git a/local/lua/.gitignore b/local/lua/.gitignore
+deleted file mode 100644
+index ffcaad4c..00000000
+--- a/local/lua/.gitignore
++++ /dev/null
+@@ -1,4 +0,0 @@
+-# Ignore everything
+-*
+-# But not this file itself.
+-!.gitignore
+diff --git a/tools/esptool.py b/tools/esptool.py
+index 38ffb724..338298c9 100755
+--- a/tools/esptool.py
++++ b/tools/esptool.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python2
+ # NB: Before sending a PR to change the above line to '#!/usr/bin/env python2', please read https://github.com/themadinventor/esptool/issues/21
+ #
+ # ESP8266 ROM Bootloader Utility
