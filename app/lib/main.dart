@@ -286,13 +286,13 @@ class SetNet extends Request<void> {
 }
 
 final _scaffoldKey = GlobalKey<ScaffoldState>();
-bool _reloading = false;
 class Device {
   static const MIN_REQ_DURATION = Duration(milliseconds: 150);
 
   final InternetAddress address;
   final int port;
   final _name, _description;
+  bool editable = false;
 
   final _state = ValueNotifier(false);
   final _reqInProgress = ValueNotifier(false);
@@ -594,7 +594,11 @@ class Device {
                     padding: EdgeInsets.only(top: 16),
                     child: Text(
                       field.errorText,
-                      style: Theme.of(context).textTheme.caption.merge(TextStyle(color: Theme.of(context).errorColor)),
+                      style: Theme.of(context).textTheme.caption.merge(
+                        TextStyle(
+                          color: Theme.of(context).errorColor
+                        )
+                      ),
                     ),
                   ),
                 ],
@@ -663,12 +667,12 @@ class Device {
                   valueListenable: _state,
                   builder: (context, state, child) => Switch(
                     value: _state.value ?? false,
-                    onChanged: _reloading ? null : setState,
+                    onChanged: editable ? setState : null,
                   ),
                 ),
           ),
-          onTap: _reloading ? null : () => setState(!_state.value),
-          onLongPress: _reloading ? null : () => _openSettings(context),
+          onTap: editable ? () => setState(!_state.value) : null,
+          onLongPress: editable ? () => _openSettings(context) : null,
         )
       )
     );
@@ -678,6 +682,7 @@ class _SockitHomeState extends State<SockitHome> with WidgetsBindingObserver {
   final List<Device> _devices = [];
   final GlobalKey<RefreshIndicatorState> _refreshKey = GlobalKey();
   final GlobalKey<AnimatedListState> _listKey = GlobalKey();
+  bool _reloading = false;
 
   @override
   void initState() {
@@ -691,6 +696,7 @@ class _SockitHomeState extends State<SockitHome> with WidgetsBindingObserver {
   Future<void> _reload(BuildContext context) async {
     setState(() {
       _reloading = true;
+      _devices.forEach((dev) => dev.editable = false);
     });
 
     final found = HashSet<Device>();
@@ -750,7 +756,10 @@ class _SockitHomeState extends State<SockitHome> with WidgetsBindingObserver {
       if (name != device.name) device.name = name;
       if (description != device.description) device.description = description;
       if (found.add(device)) {
-        device.loadState();
+        setState(() {
+          device.editable = true;
+          device.loadState();
+        });
       }
     }
 
