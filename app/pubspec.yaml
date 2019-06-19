@@ -20,6 +20,8 @@ dependencies:
   flutter:
     sdk: flutter
 
+  material_design_icons_flutter: ^3.2.3695
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

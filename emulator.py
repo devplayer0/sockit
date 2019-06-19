@@ -40,7 +40,11 @@ class AuthMode(Enum):
     WPA_WPA2 = 4
 
 def default_iface():
-   return netifaces.gateways()['default'][netifaces.AF_INET][1]
+    iface = netifaces.gateways()['default']
+    if netifaces.AF_INET not in iface:
+        return None
+
+    return iface[netifaces.AF_INET][1]
 
 class SockitHandler(socketserver.BaseRequestHandler):
     def _send_error(self, type_):

@@ -8,6 +8,9 @@ import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
+
+import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
 
 final LIST_EQUALS = ListEquality().equals;
 
@@ -18,9 +21,101 @@ const SEARCH_INTERVAL = Duration(milliseconds: 500);
 const SEARCH_TIME = Duration(seconds: 2);
 
 const DEV_DURATION = Duration(milliseconds: 200);
+const MIN_RSSI = -100;
+const MAX_RSSI = -55;
 
-InternetAddress addrFromBytes(int num) => InternetAddress(
-  '${num >> 24}.${(num >> 16) & 0xff}.${(num >> 8) & 0xff}.${num & 0xff}');
+int _rssiToLevel(int rssi, int levels) {
+  if (rssi <= MIN_RSSI) {
+    return 0;
+  } else if (rssi >= MAX_RSSI) {
+    return levels - 1;
+  } else {
+    final inputRange = (MAX_RSSI - MIN_RSSI);
+    final outputRange = (levels - 1);
+    return ((rssi - MIN_RSSI) * outputRange ~/ inputRange);
+  }
+}
+class AuthMode {
+  final String name;
+
+  AuthMode(this.name);
+
+  Icon getIcon(int rssi) {
+    final level = _rssiToLevel(rssi, 5);
+    if (this == open) {
+      switch (level) {
+        case 0:
+          return Icon(MdiIcons.wifiStrengthOutline);
+        case 1:
+          return Icon(MdiIcons.wifiStrength1);
+        case 2:
+          return Icon(MdiIcons.wifiStrength2);
+        case 3:
+          return Icon(MdiIcons.wifiStrength3);
+        case 4:
+          return Icon(MdiIcons.wifiStrength4);
+      }
+    } else if (this == unknown) {
+      switch (level) {
+        case 0:
+          return Icon(MdiIcons.wifiStrengthAlertOutline);
+        case 1:
+          return Icon(MdiIcons.wifiStrength1Alert);
+        case 2:
+          return Icon(MdiIcons.wifiStrength2Alert);
+        case 3:
+          return Icon(MdiIcons.wifiStrength3Alert);
+        case 4:
+          return Icon(MdiIcons.wifiStrength4Alert);
+      }
+    } else {
+      switch (level) {
+        case 0:
+          return Icon(MdiIcons.wifiStrengthLockOutline);
+        case 1:
+          return Icon(MdiIcons.wifiStrength1Lock);
+        case 2:
+          return Icon(MdiIcons.wifiStrength2Lock);
+        case 3:
+          return Icon(MdiIcons.wifiStrength3Lock);
+        case 4:
+          return Icon(MdiIcons.wifiStrength4Lock);
+      }
+    }
+  }
+
+  static AuthMode fromValue(int value) {
+    switch (value) {
+      case 0:
+        return open;
+      case 1:
+        return wep;
+      case 2:
+        return wpa;
+      case 3:
+        return wpa2;
+      case 4:
+        return wpaWpa2;
+      default:
+        return unknown;
+    }
+  }
+
+  static final AuthMode open = AuthMode('Open');
+  static final AuthMode wep = AuthMode('WEP');
+  static final AuthMode wpa = AuthMode('WPA PSK');
+  static final AuthMode wpa2 = AuthMode('WPA2 PSK');
+  static final AuthMode wpaWpa2 = AuthMode('WPA/WPA2 PSK');
+  static final AuthMode unknown = AuthMode('Unknown');
+}
+class NetInfo {
+  final String ssid;
+  final AuthMode authMode;
+  final int rssi;
+  NetInfo(this.ssid, this.authMode, this.rssi);
+
+  Icon getIcon() => authMode.getIcon(rssi);
+}
 
 void main() => runApp(SockitApp());
 
@@ -60,7 +155,7 @@ abstract class Request<R> {
   final int type;
   Request(this.type);
 
-  ByteData encode();
+  ByteData encode() => null;
   R decodeResponse(ByteData res) {
     if (res.lengthInBytes == 0) {
       throw 'Received zero length response';
@@ -80,9 +175,6 @@ class GetState extends Request<bool> {
     super.decodeResponse(res);
     return res.getUint8(1) != 0;
   }
-
-  @override
-  ByteData encode() => null;
 }
 class SetState extends Request<bool> {
   final bool newState;
@@ -133,6 +225,65 @@ class SetDescription extends Request<bool> {
     return true;
   }
 }
+class GetNet extends Request<dynamic> {
+  GetNet() : super(0x04);
+
+  @override
+  dynamic decodeResponse(ByteData res) {
+    super.decodeResponse(res);
+    final mode = res.getUint8(1);
+    if (mode == 1) {
+      return true;
+    } else {
+      final len = res.getUint8(2);
+      return utf8.decode(res.buffer.asUint8List(3, len));
+    }
+  }
+}
+class GetNets extends Request<List<NetInfo>> {
+  GetNets() : super(0x05);
+
+  @override
+  List<NetInfo> decodeResponse(ByteData res) {
+    super.decodeResponse(res);
+
+    final nets = List<NetInfo>();
+    final count = res.getUint8(1);
+    var offset = 2;
+    for (var i = 0; i < count; i++) {
+      final authMode = AuthMode.fromValue(res.getUint8(offset));
+      final rssi = res.getInt8(offset + 1);
+      final ssidLen = res.getUint8(offset + 2);
+      final ssid = utf8.decode(res.buffer.asUint8List(offset + 3, ssidLen));
+      offset += 3 + ssidLen;
+
+      nets.add(NetInfo(ssid, authMode, rssi));
+    }
+
+    return nets;
+  }
+}
+class SetNet extends Request<void> {
+  final String ssid, password;
+  SetNet(this.ssid, this.password) : super(0x06);
+  SetNet.ap() : this(null, null);
+
+  @override
+  ByteData encode() {
+    if (ssid == null) {
+      return ByteData(1)..setUint8(0, 1);
+    } else {
+      final start = ByteData(1)..setUint8(0, 0);
+      return ByteData.view(
+        Uint8List.fromList(
+          start.buffer.asUint8List() +
+          _encodeString(ssid).buffer.asUint8List() +
+          _encodeString(password).buffer.asUint8List()
+        ).buffer
+      );
+    }
+  }
+}
 
 final _scaffoldKey = GlobalKey<ScaffoldState>();
 bool _reloading = false;
@@ -147,9 +298,18 @@ class Device {
   final _reqInProgress = ValueNotifier(false);
 
   final GlobalKey<FormState> _settingsKey = GlobalKey();
+  final _settingsChanged = ValueNotifier(false);
   final _nameCtl = TextEditingController();
   final _descCtl = TextEditingController();
-  final _settingsChanged = ValueNotifier(false);
+  final _isApKey = GlobalKey<FormFieldState<bool>>();
+  final _cNetKey = GlobalKey<FormFieldState<String>>();
+
+  final GlobalKey<FormState> _pwdSettingsKey = GlobalKey();
+  final _pwdCtl = TextEditingController();
+
+  String _password;
+  String _currentNet;
+  List<NetInfo> _networks = List<NetInfo>();
 
   Device(this.address, this.port,
     {@required String name, @required String description}) :
@@ -201,7 +361,8 @@ class Device {
     _reqInProgress.value = true;
     try {
       return await _makeReq(req);
-    } catch (err) {
+    } catch (err, trace) {
+      print(trace);
       final snackBar = SnackBar(content: Text('$failure: $err'));
       _scaffoldKey.currentState.showSnackBar(snackBar);
     } finally {
@@ -225,6 +386,18 @@ class Device {
       _state.value = newState;
     }
   }
+  Future<void> _loadNetworks() async {
+    _pwdCtl.clear();
+    _password = null;
+    _networks = await _uiReq(GetNets());
+
+    final current = await _uiReq(GetNet());
+    if (current.runtimeType == bool && current) {
+      _currentNet = null;
+    } else {
+      _currentNet = current;
+    }
+  }
 
   _extraInfo() =>
     Wrap(
@@ -243,60 +416,209 @@ class Device {
     );
 
   String _validateStr(String value) {
-    value = value.trim();
     if (value.isEmpty) {
       return 'Enter a value';
     }
     if (utf8.encode(value).length > 0xff) {
       return 'Value too long';
     }
-    return null;
   }
-  _openSettings(BuildContext context) => showDialog(
+  _showPasswordDialog(BuildContext context, String ssid) => showDialog(
     context: context,
-    builder: (context) {
-      return AlertDialog(
-        title: Text('"$name" settings'),
-        content: SingleChildScrollView(
-          child: Form(
-            key: _settingsKey,
-            onChanged: () => _settingsChanged.value =
-              _nameCtl.text != name || _descCtl.text != description,
-            child: ListBody(
-              children: <Widget>[
-                TextFormField(
-                  controller: _nameCtl,
-                  validator: _validateStr,
-                  onSaved: (value) async {
-                    if (value == name) {
-                      return;
-                    }
+    builder: (context) => AlertDialog(
+      title: Text('Enter password for "$ssid"'),
+      content: Form(
+        key: _pwdSettingsKey,
+        child: TextFormField(
+          controller: _pwdCtl,
+          validator: _validateStr,
+          obscureText: true,
+          decoration: InputDecoration(
+            labelText: 'Password',
+          ),
+        ),
+      ),
+      actions: <Widget>[
+        FlatButton(
+          child: Text('CANCEL'),
+          onPressed: () => Navigator.of(context).pop(false),
+        ),
+        FlatButton(
+          child: Text('SAVE'),
+          onPressed: () {
+            if (_pwdSettingsKey.currentState.validate()) {
+              _password = _pwdCtl.text;
+              Navigator.of(context).pop(true);
+            }
+          },
+        ),
+      ],
+    ),
+  );
+  List<Widget> _buildNetworkItems(bool isAp, FormFieldState<String> field) {
+    final currentNet = field.value;
+    final items = List<Widget>();
+    _networks.forEach((item) =>
+      items.add(
+        ListTile(
+          enabled: !isAp,
+          selected: currentNet == item.ssid,
+          dense: true,
+          leading: item.getIcon(),
+          title: Text(item.ssid),
+          subtitle: Text(
+            _currentNet == item.ssid ?
+            '${item.authMode.name} - Currently connected' : item.authMode.name,
+          ),
+          onTap: item.authMode == AuthMode.unknown ? null : () async {
+            var shouldSet = true;
+            if (item.authMode != AuthMode.open) {
+              shouldSet = await _showPasswordDialog(field.context, item.ssid);
+              _pwdCtl.clear();
+            }
+            if (!shouldSet) {
+              return;
+            }
 
-                    if (await _uiReq(SetName(value)) != null)
-                      name = value;
-                  },
-                  decoration: InputDecoration(
-                    labelText: 'Name',
-                  ),
-                ),
-                TextFormField(
-                  controller: _descCtl,
-                  validator: _validateStr,
-                  onSaved: (value) async {
-                    if (value == description) {
-                      return;
-                    }
+            field.setState(() {
+              field.setValue(item.ssid);
+              _checkSettingsChanged();
+            });
+          },
+        )
+      )
+    );
 
-                    if (await _uiReq(SetDescription(value)) != null)
-                      description = value;
-                  },
-                  decoration: InputDecoration(
-                    labelText: 'Description',
-                  ),
-                ),
-              ],
+    return items;
+  }
+  _checkSettingsChanged() => _settingsChanged.value =
+    _nameCtl.text != name || _descCtl.text != description ||
+    _isApKey.currentState.value != (_currentNet == null) ||
+    _cNetKey.currentState.value != _currentNet ||
+    _password != null;
+  _buildSettingsForm(BuildContext context) => Form(
+    key: _settingsKey,
+    onChanged: _checkSettingsChanged,
+    child: Container(
+      child: ListBody(
+        children: <Widget>[
+          TextFormField(
+            controller: _nameCtl,
+            validator: _validateStr,
+            onSaved: (value) async {
+              if (value == name) {
+                return;
+              }
+
+              if (await _uiReq(SetName(value)) != null)
+                name = value;
+            },
+            decoration: InputDecoration(
+              labelText: 'Name',
             ),
           ),
+          TextFormField(
+            controller: _descCtl,
+            validator: _validateStr,
+            onSaved: (value) async {
+              if (value == description) {
+                return;
+              }
+
+              if (await _uiReq(SetDescription(value)) != null)
+                description = value;
+            },
+            decoration: InputDecoration(
+              labelText: 'Description',
+            ),
+          ),
+          Container(
+            padding: EdgeInsets.only(top: 16),
+            child: Text(
+              'WiFi network',
+              style: Theme.of(context).textTheme.caption,
+            ),
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: <Widget>[
+              Text('Use built-in WiFi'),
+              FormField(
+                key: _isApKey,
+                initialValue: _currentNet == null,
+                builder: (field) => Switch(
+                  value: field.value,
+                  onChanged: (value) => field.setState(() {
+                    field.setValue(value);
+                    _checkSettingsChanged();
+                    _cNetKey.currentState.setState(() {});
+                  }),
+                ),
+                onSaved: (value) {
+                  if (_isApKey.currentState.value == (_currentNet == null) &&
+                    _cNetKey.currentState.value == _currentNet &&
+                    _password == null) {
+                    // WiFi settings not changed
+                    return;
+                  }
+
+                  if (value) {
+                    _uiReq(SetNet.ap());
+                  } else {
+                    _uiReq(SetNet(_cNetKey.currentState.value, _password ?? ''));
+                  }
+                },
+              ),
+            ],
+          ),
+          Container(
+            width: double.maxFinite,
+            height: 270,
+            child: FormField(
+              key: _cNetKey,
+              initialValue: _currentNet,
+              builder: (field) => Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Expanded(
+                    child: Scrollbar(
+                      child: ListView(
+                        children: _buildNetworkItems(
+                          _isApKey.currentState.value,
+                          field
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (field.hasError) Container(
+                    padding: EdgeInsets.only(top: 16),
+                    child: Text(
+                      field.errorText,
+                      style: Theme.of(context).textTheme.caption.merge(TextStyle(color: Theme.of(context).errorColor)),
+                    ),
+                  ),
+                ],
+              ),
+              validator: (currentNet) {
+                if (currentNet == null && !_isApKey.currentState.value) {
+                  return 'Please select a network';
+                }
+              },
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+  _openSettings(BuildContext context) async {
+    await _loadNetworks();
+    _settingsChanged.value = false;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('"$name" settings'),
+        content: SingleChildScrollView(
+          child: _buildSettingsForm(context),
         ),
         actions: <Widget>[
           FlatButton(
@@ -318,9 +640,9 @@ class Device {
               ),
           ),
         ],
-      );
-    }
-  );
+      ),
+    );
+  }
 
   Widget build(BuildContext context, Animation<double> animation) =>
     SizeTransition(
