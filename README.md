@@ -47,6 +47,41 @@ a Mac or iOS device (and don't have the $99 developer license from Apple), this 
 
 Feel free to try and build the app on your own iOS device!
 
+## Usage
+### Initial configuration
+Once everything is flashed / installed, you can plug in your device. After a few seconds, the status LED
+(green on a Sonoff S20) will go solid. You should then search for (and connect to) a WiFi network named
+"Sockit-<something>". This is a special network hosted by the device which allows you to control the device
+without connecting it your local network.
+
+You can the open the app, and after a quick search (swipe down to refresh), the device should be found by
+some Multicast magic. From here, you can tap the device in the list to switch the socket on / off. Although
+the Sockit can be used permanently in this way, it will be open to anybody who can see the network and range
+will be quite limited.
+
+### Changing settings
+In order to open the settings menu, long press on the device in the list. From here, you can set the name,
+description and, most importantly, WiFi settings for your device. By sliding the "Use built-in WiFi" switch
+to the off position, you can scroll through the list of networks that the device is able to connect to.
+Tapping on one of these will then prompt you for a password.
+
+Once the WiFi settings are saved (and you decided to connect your device to an existing WiFi network), the
+status LED will blink continuously until a connection is established (this will also happen if the connection
+is lost). The LED will then switch off.
+
+### Button actions
+The built-in button on the Sonoff S20 has a number of programmed functions:
+- Pressing the button once will switch the electrical socket on or off.
+- Holding it for more than a second will temporarily switch the device into using built-in WiFi (instead of
+trying to connect to a configured network - **useful if the password was entered incorrectly and the device
+is stuck trying to connect**)
+- Holding for more than 5 seconds will reboot the device
+- Holding for more than 20 seconds will erase configuration and reboot ("factory reset")
+
+# App development
+To simplify app development, a simple emulator for the network protocol used by the Lua firmware is provided
+in Python.
+
 # Firmware development
 ## Building the firmware
 If you want to build the firmware from source (e.g. if you want to change the pin definitions for use with a
