@@ -289,12 +289,17 @@ class Device {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   Expanded(
-                    child: Scrollbar(
+                    child: _networks.isNotEmpty ? Scrollbar(
                       child: ListView(
                         children: _buildNetworkItems(
                           _isApKey.currentState.value,
                           field
                         ),
+                      ),
+                    ) : Center(
+                      child: Text(
+                        'No networks found.',
+                        style: Theme.of(context).textTheme.caption,
                       ),
                     ),
                   ),
