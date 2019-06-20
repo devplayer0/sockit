@@ -1,6 +1,6 @@
 require 'config_helper'
+require 'pins'
 
-STATUS_PIN = 7
 gpio.mode(STATUS_PIN, gpio.OUTPUT)
 
 function stop_wifi_timer()

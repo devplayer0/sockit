@@ -1,0 +1,2 @@
+RELAY_PIN = 6
+STATUS_PIN = 7

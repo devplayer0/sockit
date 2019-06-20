@@ -1,7 +1,6 @@
 require 'config_helper'
 require 'wifi_helper'
-
-RELAY_PIN = 6
+require 'pins'
 
 MULTICAST_GROUP = '224.0.0.220'
 PORT = 40420
