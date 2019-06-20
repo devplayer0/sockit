@@ -1,8 +1,8 @@
 require 'config_helper'
 require 'wifi_helper'
+require 'pins'
 require 'main'
 
-RELAY_PIN = 6
 gpio.mode(RELAY_PIN, gpio.OUTPUT)
 
 button_start = 0
