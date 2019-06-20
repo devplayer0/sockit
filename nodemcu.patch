@@ -127,31 +127,6 @@ index f8ba27db..0de28a01 100644
  
  #ifndef BUILD_DATE
  #define BUILD_DATE		"unspecified"
-diff --git a/build.sh b/build.sh
-new file mode 100755
-index 00000000..b8ebb004
---- /dev/null
-+++ b/build.sh
-@@ -0,0 +1,5 @@
-+#!/bin/sh
-+set -e
-+
-+make
-+srec_cat -output bin/nodemcu.bin -binary bin/0x00000.bin -binary -fill 0xff 0x00000 0x10000 bin/0x10000.bin -binary -offset 0x10000
-diff --git a/lfs.sh b/lfs.sh
-new file mode 100755
-index 00000000..4e5962bc
---- /dev/null
-+++ b/lfs.sh
-@@ -0,0 +1,8 @@
-+#!/bin/sh
-+set -e
-+
-+LFS_MAPPED="0x40268000"
-+LFS_BASE="0x68000"
-+
-+./luac.cross.int -a $LFS_MAPPED -o bin/lfs.img local/lua/*.lua
-+esptool --baud 460800 write_flash --flash_mode dout $LFS_BASE bin/lfs.img
 diff --git a/local/lua b/local/lua
 new file mode 120000
 index 00000000..5a3d3c1f
