@@ -10,12 +10,22 @@ function stop_wifi_timer()
   gpio.write(STATUS_PIN, gpio.HIGH)
 end
 function apply_wifi_config(config, cb)
+  wifi.eventmon.unregister(wifi.eventmon.AP_STACONNECTED)
+  wifi.eventmon.unregister(wifi.eventmon.STA_CONNECTED)
+  wifi.eventmon.unregister(wifi.eventmon.STA_GOT_IP)
+  wifi.eventmon.unregister(wifi.eventmon.STA_DISCONNECTED)
+  wifi.eventmon.unregister(wifi.eventmon.STA_DHCP_TIMEOUT)
+
   if wifi.getmode() == wifi.STATION then
     wifi.sta.disconnect()
   end
   stop_wifi_timer()
 
   if config.wifi.ap then
+    wifi.eventmon.register(wifi.eventmon.AP_STACONNECTED, function(event)
+      print(string.format('%s connected to ap', event.MAC))
+    end)
+
     local ssid = default_name()
     print('setting up ap '..ssid)
 
@@ -34,20 +44,16 @@ function apply_wifi_config(config, cb)
       save = false,
     })
 
-    cb()
+    tmr.create():alarm(200, tmr.ALARM_SINGLE, function(t)
+      cb()
+    end)
   else
-    wifi.eventmon.unregister(wifi.eventmon.STA_CONNECTED)
-    wifi.eventmon.unregister(wifi.eventmon.STA_GOT_IP)
-    wifi.eventmon.unregister(wifi.eventmon.STA_DISCONNECTED)
-    wifi.eventmon.unregister(wifi.eventmon.STA_DHCP_TIMEOUT)
 
     attempts = 0
     wifi.eventmon.register(wifi.eventmon.STA_CONNECTED, function(event)
       print('connected to '..event.SSID)
     end)
     wifi.eventmon.register(wifi.eventmon.STA_GOT_IP, function(event)
-      wifi.eventmon.unregister(wifi.eventmon.STA_CONNECTED)
-
       print('got ip '..event.IP..' from '..config.wifi.ssid)
       stop_wifi_timer()
       cb()
