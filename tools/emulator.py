@@ -126,6 +126,14 @@ class SockitHandler(socketserver.BaseRequestHandler):
 
             res = struct.pack('B', ResType.OK.value)
             self.request.sendall(res)
+        elif req_type == ReqType.UPGRADE:
+            size = self.request.recv(2, socket.MSG_WAITALL)
+            size, = struct.unpack('!H', size)
+
+            print(f'{src} upgrading firmware ({size} bytes)')
+            assert len(self.request.recv(size, socket.MSG_WAITALL)) == size
+            res = struct.pack('B', ResType.OK.value)
+            self.request.sendall(res)
 
 class Emulator:
     def __init__(self, name, description, iface, port):

@@ -14,6 +14,7 @@ class ReqType(Enum):
     GET_NET       = 0x04
     GET_NETS      = 0x05
     SET_NET       = 0x06
+    UPGRADE       = 0xcc
 class ResType(Enum):
     OK = 0x00
     ERROR = 0xff

@@ -3,6 +3,7 @@ import argparse
 import struct
 import getpass
 import errno
+import os
 import sys
 import time
 import socket
@@ -140,6 +141,18 @@ def cmd_set_net(args):
     pwd = getpass.getpass(f'Password for "{args.network}": ')
     fd_req(args, ReqType.SET_NET, b'\x00' + encode_str(args.network) + encode_str(pwd))
 
+def cmd_upgrade(args):
+    with open(args.firmware, 'rb') as firm:
+        firm.seek(0, os.SEEK_END)
+        if firm.tell() > 0xffff:
+            print(f'Firmware {args.firmware} is too big')
+            sys.exit(1)
+
+        firm.seek(0, os.SEEK_SET)
+        data = firm.read()
+
+    fd_req(args, ReqType.UPGRADE, struct.pack('!H', len(data)) + data)
+
 def main():
     parser = argparse.ArgumentParser(description='Sockit CLI',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -176,6 +189,10 @@ def main():
     p_set_net = commands.add_parser('set_net', help='Set device network')
     p_set_net.set_defaults(func=cmd_set_net)
     p_set_net.add_argument('network', help='WiFi network to connect device to')
+
+    p_upgrade = commands.add_parser('upgrade', help='Upgrade device firmware')
+    p_upgrade.set_defaults(func=cmd_upgrade)
+    p_upgrade.add_argument('firmware', help='Firmware file')
 
     args = parser.parse_args()
     args.func(args)
