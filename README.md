@@ -78,9 +78,13 @@ is stuck trying to connect**)
 - Holding for more than 5 seconds will reboot the device
 - Holding for more than 20 seconds will erase configuration and reboot ("factory reset")
 
+### CLI
+A simple command-line tool is provided in the `tools/` directory, run `tools/cli.py --help` for more
+information.
+
 # App development
 To simplify app development, a simple emulator for the network protocol used by the Lua firmware is provided
-in Python.
+in Python. (see the `tools/` directory).
 
 # Firmware development
 ## Building the firmware
