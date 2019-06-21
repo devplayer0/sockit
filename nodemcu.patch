@@ -15,7 +15,7 @@ index ddf3c2d2..79ca6819 100644
  uz_zip
  tools/toolchains/
 diff --git a/app/include/user_config.h b/app/include/user_config.h
-index fef04b1d..2aae3a87 100644
+index fef04b1d..ce269737 100644
 --- a/app/include/user_config.h
 +++ b/app/include/user_config.h
 @@ -35,7 +35,7 @@
@@ -50,7 +50,7 @@ index fef04b1d..2aae3a87 100644
  
  #define BUILD_SPIFFS
 -//#define SPIFFS_FIXED_LOCATION        0x100000
-+#define SPIFFS_FIXED_LOCATION        0xc0000
++#define SPIFFS_FIXED_LOCATION        0x80000
  //#define SPIFFS_MAX_FILESYSTEM_SIZE    0x20000
  //#define SPIFFS_SIZE_1M_BOUNDARY
  #define SPIFFS_CACHE 1          // Enable if you use you SPIFFS in R/W mode
