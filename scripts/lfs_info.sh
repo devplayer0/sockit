@@ -2,7 +2,7 @@
 set -e
 
 LFS_FILE="bin/lfs.img"
-LFS_UPGRADE="bin/upgrade.img"
+LFS_UPGRADE="bin/upgrade.img.gz"
 
 LFS_MAPPED="0x4026a000"
 LFS_BASE="0x6a000"

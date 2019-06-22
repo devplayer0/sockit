@@ -33,11 +33,12 @@ Note:
  - `--flash-mode` will depend on your ESP8266, but for Sonoffs this is generally `DOUT`
 
 ## App installation
-You can get a pre-built version of the app from the Play Store - it costs €1.99 (or your regional equivalent).
-The Play Store version is built directly from this code (and no binaries are provided in this repo). Think of
-buying the app from the store as a "donation"!
+You can get a pre-built version of the app
+[from the Play Store](https://play.google.com/store/apps/details?id=ie.nul.sockit) - it costs €2.49 (or your
+regional equivalent). The Play Store version is built directly from this code (no binaries are provided in 
+this repo). Think of buying the app from the store as a "donation"!
 
-If you want to build the app yourself, that's as easy as installing
+If you don't want to buy it, you can get the code from here build the app yourself - that's as easy as installing
 [Flutter](https://flutter.dev/docs/get-started/install) and running `flutter build` in the `app/` directory.
 
 ### iOS?
@@ -68,6 +69,9 @@ Tapping on one of these will then prompt you for a password.
 Once the WiFi settings are saved (and you decided to connect your device to an existing WiFi network), the
 status LED will blink continuously until a connection is established (this will also happen if the connection
 is lost). The LED will then switch off.
+
+_Note: Make sure the network your Sockit is connected to is only accessible by people / devices you trust with
+full control of the device! **IT SHOULD NOT BE ACCESSIBLE OVER THE INTERNET**_
 
 ### Button actions
 The built-in button on the Sonoff S20 has a number of programmed functions:
