@@ -5,6 +5,7 @@ require 'pins'
 MULTICAST_GROUP = '224.0.0.220'
 PORT = 40420
 MAGIC = 'SKIT'
+UPGRADE_FILE = 'upgrade.img.gz'
 
 DISC_SEARCH   = 0x00
 
@@ -15,6 +16,7 @@ REQ_SET_DESC  = 0x03
 REQ_GET_NET   = 0x04
 REQ_GET_NETS  = 0x05
 REQ_SET_NET   = 0x06
+REQ_UPGRADE   = 0xcc
 
 RES_OK        = 0x00
 RES_ERROR     = 0xff
@@ -46,6 +48,48 @@ function check_string(sock, data)
   return string.sub(data, 2, 1 + len)
 end
 
+function handle_upgrade(sock, data)
+    if #data + upgrade_received > upgrade_size then
+      print('warning: truncating incoming upgrade data')
+      data = string.sub(data, 1, upgrade_size - upgrade_received)
+    end
+
+    if not upgrade_file:write(data) then
+      upgrade_file:close()
+      upgrade_file = nil
+      send_error(sock, ERR_FAILED)
+      return
+    end
+    upgrade_received = upgrade_received + #data
+    print(string.format('received %d / %d bytes of upgrade data', upgrade_received, upgrade_size))
+
+    if upgrade_received ~= upgrade_size then
+      return
+    end
+
+    print(string.format('upgrade file sha1: %s', crypto.toHex(crypto.fhash('sha1', UPGRADE_FILE))))
+
+    local res = struct.pack('B', RES_OK)
+    sock:send(res, function()
+      sock:close()
+      upgrade_file:close()
+
+      print('starting upgrade...')
+      local err = node.flashreload(UPGRADE_FILE)
+      if err then
+        print(string.format("failed to apply upgrade: %s", err))
+        local blinker = tmr.create()
+        blinker:alarm(100, tmr.ALARM_AUTO, function(t)
+          gpio.write(STATUS_PIN, gpio.read(STATUS_PIN) == gpio.HIGH and gpio.LOW or gpio.HIGH)
+        end)
+
+        tmr.create():alarm(3000, tmr.ALARM_SINGLE, function(t)
+          blinker:unregister()
+          node.restart()
+        end)
+      end
+    end)
+end
 -- we assume a request fits within one packet
 function handle_req(sock, data)
   if #data < 5 or string.sub(data, 1, 4) ~= MAGIC then
@@ -151,6 +195,26 @@ function handle_req(sock, data)
       end)
     end)
     return
+  elseif req_type == REQ_UPGRADE then
+    if #data < 7 then
+      send_error(sock, ERR_BAD_REQ)
+      return
+    end
+
+    upgrade_size = struct.unpack('>H', string.sub(data, 6))
+    print(string.format('expecting to receive %d byte firmware from %s', upgrade_size, addr))
+
+    main_stop()
+    upgrade_file = file.open(UPGRADE_FILE, 'w+')
+    if not upgrade_file then
+      send_error(sock, ERR_FAILED)
+      return
+    end
+
+    upgrade_received = 0
+    local initial_data = string.sub(data, 8)
+    handle_upgrade(sock, initial_data)
+    return
   else
     send_error(sock, ERR_BAD_REQ)
     return
@@ -167,7 +231,14 @@ function main_start(conf)
 
   server = net.createServer()
   server:listen(PORT, function(sock)
-    sock:on('receive', handle_req)
+    sock:on('receive', function(sock, data)
+      if upgrade_file then
+        handle_upgrade(sock, data)
+        return
+      end
+
+      handle_req(sock, data)
+    end)
   end)
 
   net.multicastJoin('any', MULTICAST_GROUP)

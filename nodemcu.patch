@@ -55,7 +55,7 @@ index fef04b1d..ce269737 100644
  //#define SPIFFS_SIZE_1M_BOUNDARY
  #define SPIFFS_CACHE 1          // Enable if you use you SPIFFS in R/W mode
 diff --git a/app/include/user_modules.h b/app/include/user_modules.h
-index 009accd9..387d2490 100644
+index 009accd9..8e648084 100644
 --- a/app/include/user_modules.h
 +++ b/app/include/user_modules.h
 @@ -7,7 +7,7 @@
@@ -67,11 +67,13 @@ index 009accd9..387d2490 100644
  //#define LUA_USE_MODULES_ADS1115
  //#define LUA_USE_MODULES_ADXL345
  //#define LUA_USE_MODULES_AM2320
-@@ -21,7 +21,7 @@
+@@ -20,8 +20,8 @@
+ //#define LUA_USE_MODULES_COAP
  //#define LUA_USE_MODULES_COLOR_UTILS
  //#define LUA_USE_MODULES_CRON
- //#define LUA_USE_MODULES_CRYPTO
+-//#define LUA_USE_MODULES_CRYPTO
 -#define LUA_USE_MODULES_DHT
++#define LUA_USE_MODULES_CRYPTO
 +//#define LUA_USE_MODULES_DHT
  //#define LUA_USE_MODULES_DS18B20
  //#define LUA_USE_MODULES_ENCODER

@@ -95,7 +95,7 @@ def make_req(addr, type_, payload=None):
     res = sock.recv(4096)
     sock.close()
 
-    if res[0] == ResType.ERROR:
+    if res[0] == ResType.ERROR.value:
         raise SockitError(res[1])
     return res[1:]
 def fd_req(args, type_, payload=None):
